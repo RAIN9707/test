@@ -1,6 +1,5 @@
 import os
 import random
-import numpy as np
 from collections import deque
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
@@ -15,145 +14,121 @@ LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# **撲克牌計數（8 副牌，共 416 張，每個數字 32 張）**
-card_counts = {i: 32 for i in range(10)}
-total_cards = sum(card_counts.values())
-
-# **動態下注參數**
-initial_balance = None  # 使用者輸入的本金
-base_bet = None  # 動態計算基礎下注金額
-min_bet = 100  
+# **遊戲狀態**
+game_active = False
+initial_balance = None
+base_bet = None
 current_bet = None
 balance = None
-win_streak = 0  
-lose_streak = 0  
-history = deque(maxlen=20)  
+history = deque(maxlen=50)  # 記錄最多 50 局
+remaining_cards = {i: 32 for i in range(10)}  # 8副牌，共416張，每個數字32張
 
 # **獲利鎖定與回撤保護**
 profit_target = None  
 loss_threshold = None  
 recovery_threshold = None  
 
+# **撲克牌對應數值**
+card_values = {
+    "A": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, 
+    "10": 0, "J": 0, "Q": 0, "K": 0
+}
+
 # **更新剩餘牌組**
-def update_card_counts(*drawn_cards):
-    global total_cards
-    for card in drawn_cards:
-        if card is not None and card_counts[card] > 0:
-            card_counts[card] -= 1
-            total_cards -= 1
+def update_card_counts(cards):
+    """ 記錄本局已出現的牌，減少剩餘張數 """
+    for card in cards:
+        value = card_values.get(card.upper(), None)
+        if value is not None and remaining_cards[value] > 0:
+            remaining_cards[value] -= 1
 
-# **補牌規則計算**
-def should_banker_draw(banker_score, player_third_card):
-    if player_third_card is None:
-        return banker_score <= 5
-    if banker_score <= 2:
-        return True
-    elif banker_score == 3 and player_third_card != 8:
-        return True
-    elif banker_score == 4 and player_third_card in [2, 3, 4, 5, 6, 7]:
-        return True
-    elif banker_score == 5 and player_third_card in [4, 5, 6, 7]:
-        return True
-    elif banker_score == 6 and player_third_card in [6, 7]:
-        return True
-    return False
+# **解析牌輸入**
+def parse_card_input(input_str):
+    """ 解析用戶輸入的莊家與閒家牌，如 'AJ / K8J' """
+    try:
+        parts = input_str.split("/")
+        if len(parts) != 2:
+            return None, None
+        
+        player_cards = parts[0].strip().upper()
+        banker_cards = parts[1].strip().upper()
 
-# **分析剩餘牌組影響勝率**
-def analyze_card_counts():
-    if total_cards == 0:
-        return 0.5068, 0.4932  
+        # 計算點數
+        player_score = sum(card_values.get(card, 0) for card in player_cards) % 10
+        banker_score = sum(card_values.get(card, 0) for card in banker_cards) % 10
 
-    high_cards = sum(card_counts[i] for i in [8, 9]) / total_cards
-    low_cards = sum(card_counts[i] for i in [0, 1, 2, 3, 4, 5]) / total_cards
+        # 更新剩餘牌組
+        update_card_counts(player_cards)
+        update_card_counts(banker_cards)
 
-    banker_advantage = 0.5068 + (high_cards - low_cards) * 0.02
+        return player_score, banker_score
+    except Exception:
+        return None, None
+
+# **計算勝率**
+def calculate_win_probabilities():
+    """ 根據剩餘牌組計算莊家與閒家的勝率變化 """
+    total_remaining = sum(remaining_cards.values())
+    
+    if total_remaining == 0:
+        return 0.5068, 0.4932  # 預設莊家 50.68%，閒家 49.32%
+
+    high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
+    low_card_ratio = (remaining_cards[0] + remaining_cards[1] + remaining_cards[2] + remaining_cards[3] + remaining_cards[4]) / total_remaining
+
+    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02
     player_advantage = 1 - banker_advantage
 
     return banker_advantage, player_advantage
 
-# **最近 10 局勝率分析**
-def analyze_recent_trends():
-    banker_wins = sum(1 for h in history if h["結果"] == "banker_win")
-    player_wins = sum(1 for h in history if h["結果"] == "player_win")
+# **計算下注策略**
+def calculate_best_bet(player_score, banker_score):
+    global balance, current_bet
 
-    if len(history) < 10:
-        return 0.5068, 0.4932  
+    banker_prob, player_prob = calculate_win_probabilities()
 
-    trend_banker = banker_wins / len(history)
-    trend_player = player_wins / len(history)
-
-    return trend_banker, trend_player
-
-# **更新下注金額**
-def update_bet():
-    global current_bet, win_streak, lose_streak, balance
-
-    if balance >= profit_target:
-        current_bet = min(balance * 0.05, current_bet)
-    elif balance <= loss_threshold:
-        current_bet = max(min_bet, base_bet * 0.5)
-    elif balance >= recovery_threshold:
-        current_bet = base_bet
-    else:
-        if win_streak >= 2:
-            current_bet += 50  
-        if lose_streak == 3:
-            current_bet = max(base_bet * 0.75, min_bet)  
-        if lose_streak >= 6:
-            current_bet = base_bet  
-
-# **計算最佳下注**
-def calculate_best_bet():
-    global balance, win_streak, lose_streak
-
-    banker_prob, player_prob = analyze_card_counts()
-    trend_banker, trend_player = analyze_recent_trends()
-
-    final_banker_prob = (banker_prob + trend_banker) / 2
-    final_player_prob = (player_prob + trend_player) / 2
-
-    banker_win = random.random() < final_banker_prob  
+    banker_win = random.random() < banker_prob  
     player_win = not banker_win  
 
-    result = "banker_win" if banker_win else "player_win"
-    balance += current_bet * (0.95 if banker_win else 1)
-    win_streak = win_streak + 1 if banker_win else 0
-    lose_streak = lose_streak + 1 if not banker_win else 0
+    result = "莊家贏" if banker_win else "閒家贏"
+    win_multiplier = 0.95 if banker_win else 1  
 
-    history.append({
-        "結果": result,
-        "下注金額": current_bet,
-        "剩餘資金": balance
-    })
+    balance += current_bet * win_multiplier
+    history.append({"局數": len(history) + 1, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    update_bet()
-
-    return f"🎯 最佳下注：{result.upper()} \n💰 下注金額：${current_bet} \n💵 剩餘資金：${balance}"
+    return f"🎯 本局結果：{result}\n💰 下注金額：${current_bet}\n🏆 剩餘資金：${balance}"
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global initial_balance, balance, base_bet, current_bet, profit_target, loss_threshold, recovery_threshold
+    global game_active, initial_balance, balance, base_bet, current_bet, profit_target, loss_threshold, recovery_threshold
 
     user_input = event.message.text.strip().lower()
     
     if user_input == "開始":
+        game_active = True
         reply_text = "請輸入您的本金金額，例如：5000"
-    elif user_input.isdigit():
+    elif user_input.isdigit() and game_active and initial_balance is None:
         initial_balance = int(user_input)
         balance = initial_balance
-        base_bet = round((initial_balance * 0.03) / 50) * 50
+        base_bet = round((initial_balance * 0.03) / 50) * 50  # 計算最佳單注金額
         current_bet = base_bet
         profit_target = initial_balance * 2
         loss_threshold = initial_balance * 0.6
         recovery_threshold = initial_balance * 0.8
-        reply_text = f"🎯 設定成功！\n💰 本金：${initial_balance}\n🃏 建議單注金額：${base_bet}\n請輸入「下注」開始！"
-    elif user_input == "下注":
-        best_bet = calculate_best_bet()
-        reply_text = best_bet
+        reply_text = f"🎯 設定成功！\n💰 本金：${initial_balance}\n🃏 建議單注金額：${base_bet}\n請輸入莊家與閒家的發牌（格式：AJ / K8J）"
     elif user_input == "結束":
-        reply_text = f"🎉 遊戲結束！\n💰 最終資本金額：${balance}\n📈 歷史記錄：{len(history)} 局"
+        game_active = False
+        win_count = sum(1 for h in history if h["結果"] == "莊家贏")
+        lose_count = len(history) - win_count
+        reply_text = f"🎉 遊戲結束！\n💰 最終資本金額：${balance}\n📈 總局數：{len(history)}\n✅ 莊家勝局數：{win_count}\n❌ 閒家勝局數：{lose_count}"
+    elif game_active and initial_balance is not None:
+        player_score, banker_score = parse_card_input(user_input)
+        if player_score is not None and banker_score is not None:
+            reply_text = calculate_best_bet(player_score, banker_score)
+        else:
+            reply_text = "❌ 請輸入正確格式（例如：AJ / K8J 代表閒家 A、J，莊家 K、8、J）"
     else:
-        reply_text = "請輸入「開始」來設定本金，或「下注」來計算最佳下注策略！"
+        reply_text = "請輸入「開始」來設定本金，或「結束」來結束遊戲！"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
