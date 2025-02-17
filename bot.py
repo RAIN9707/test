@@ -61,15 +61,17 @@ def calculate_best_bet(player_score, banker_score):
         result = "和局"
 
     # **確認是否與建議下注相符**
-    win_multiplier = 0.95 if previous_suggestion == "莊" else 1
-    if previous_suggestion and previous_suggestion == result[:2]:  
-        balance += current_bet * win_multiplier  # **如果下注正確，依照倍率加錢**
+    bet_result = "❌ 錯誤"
+    if previous_suggestion == "莊" and result == "莊家贏":
+        balance += current_bet * 0.95  # **莊家贏，獲利 0.95 倍**
+        bet_result = "✅ 正確"
+    elif previous_suggestion == "閒" and result == "閒家贏":
+        balance += current_bet  # **閒家贏，獲利 1 倍**
         bet_result = "✅ 正確"
     elif result == "和局":
         bet_result = "🔄 和局 - 本金不變"
     else:
         balance -= current_bet  # **下注錯誤則扣錢**
-        bet_result = "❌ 錯誤"
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
