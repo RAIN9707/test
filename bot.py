@@ -30,6 +30,7 @@ total_losses = 0
 round_count = 0  # **紀錄局數**
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
+previous_suggestion = None  # **記錄上一局建議下注的目標**
 
 # **勝率計算**
 def calculate_win_probabilities():
@@ -46,7 +47,7 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, total_wins, total_losses, round_count
+    global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -59,9 +60,16 @@ def calculate_best_bet(player_score, banker_score):
     else:
         result = "和局"
 
+    # **確認是否與建議下注相符**
+    win_multiplier = 0.95 if previous_suggestion == "莊" else 1
+    if previous_suggestion and previous_suggestion == result[:2]:  
+        balance += current_bet * win_multiplier  # **如果下注正確，依照倍率加錢**
+    else:
+        balance -= current_bet  # **下注錯誤則扣錢**
+    
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    # **下注金額計算**
+    # **計算下一局下注金額**
     if round_count == 1:
         next_bet_amount = base_bet  # **第一局不下注，第二局開始使用基礎金額**
     else:
@@ -73,29 +81,23 @@ def calculate_best_bet(player_score, banker_score):
             next_bet_amount = current_bet
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
+    previous_suggestion = "莊" if banker_prob > player_prob else "閒"
 
     # **第一局只給下注建議，不實際下注**
     if round_count == 1:
         return (
             f"📌 第 1 局結果：{result}（僅記錄，不下注）\n\n"
             f"✅ **第 2 局下注建議**\n"
-            f"🎯 下注目標：{'莊' if banker_prob > player_prob else '閒'}\n"
+            f"🎯 下注目標：{previous_suggestion}\n"
             f"💰 下注金額：${next_bet_amount}"
         )
-    
-    # **從第二局開始計算資金變動**
-    if player_score > banker_score:
-        balance += current_bet
-    elif banker_score > player_score:
-        balance -= current_bet
-    # 和局則資金不變
 
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
         f"💰 下注金額：${current_bet}\n"
         f"💵 剩餘資金：${balance}\n\n"
         f"✅ **第 {round_count + 1} 局下注建議**\n"
-        f"🎯 下注目標：{'莊' if banker_prob > player_prob else '閒'}\n"
+        f"🎯 下注目標：{previous_suggestion}\n"
         f"💰 下注金額：${next_bet_amount}"
     )
 
