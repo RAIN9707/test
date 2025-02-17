@@ -3,16 +3,20 @@ import random
 import numpy as np
 from scipy.stats import beta
 from collections import deque
-from flask import Flask, request
+from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# **環境變數**
+# **設定 LINE Bot 環境變數**
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+
+if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
+    raise ValueError("請確保 LINE_CHANNEL_ACCESS_TOKEN 和 LINE_CHANNEL_SECRET 已正確設定！")
+
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
@@ -131,6 +135,20 @@ def calculate_best_bet(player_score, banker_score):
         f"💵 **建議下注金額：${next_bet_amount}**"
     )
 
+# **處理 Webhook**
+@app.route("/callback", methods=['POST'])
+def callback():
+    """ LINE Webhook 入口點，處理來自 LINE 的請求 """
+    signature = request.headers.get("X-Line-Signature")
+    body = request.get_data(as_text=True)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+
+    return "OK", 200  # **⚠️ 確保回應 HTTP 200**
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     global game_active, waiting_for_player, waiting_for_banker, last_player_score
@@ -157,3 +175,7 @@ def handle_message(event):
         reply_text = "請輸入「開始」來設定本金"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
