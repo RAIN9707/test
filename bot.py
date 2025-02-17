@@ -99,37 +99,6 @@ def calculate_best_bet(player_cards, banker_cards):
         f"建議下注金額：${next_bet_amount}"
     )
 
-# **模擬 10,000 局**
-def simulate_games(trials=10000):
-    temp_balance = initial_balance
-    wins, losses = 0, 0
-    temp_bet = base_bet
-
-    for _ in range(trials):
-        player_cards = [random.randint(0, 9), random.randint(0, 9)]
-        banker_cards = [random.randint(0, 9), random.randint(0, 9)]
-
-        if should_banker_draw(sum(banker_cards) % 10, player_cards[1]):
-            banker_cards.append(random.randint(0, 9))
-
-        player_score = sum(player_cards) % 10
-        banker_score = sum(banker_cards) % 10
-
-        if player_score > banker_score:
-            temp_balance += temp_bet
-            wins += 1
-        elif banker_score > player_score:
-            temp_balance += temp_bet * 0.95
-            wins += 1
-        else:
-            continue  
-
-        temp_bet = base_bet if losses >= 3 else temp_bet * 1.75 if wins >= 2 else temp_bet
-        temp_bet = round(temp_bet / 50) * 50  
-
-    profit = temp_balance - initial_balance
-    return f"模擬 10,000 局結果：\n勝率：{(wins/trials)*100:.2f}%\n最終本金：${temp_balance}\n盈虧變化：${profit}"
-
 # **Webhook**
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -168,7 +137,9 @@ def handle_message(event):
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"總局數：{total_games}\n勝場數：{total_wins}\n敗場數：{total_losses}\n勝率：{(total_wins/total_games)*100:.2f}%\n盈虧金額：${profit}\n最終資本金：${balance}"))
 
     elif game_active:
-        player, banker = parse_number_input(user_input)
-        if player and banker:
-            reply_text = calculate_best_bet(player[0], banker[0])
+        try:
+            player, banker = [list(map(int, hand)) for hand in user_input.split()]
+            reply_text = calculate_best_bet(player, banker)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        except:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '89 76' 或 '189 275'"))
