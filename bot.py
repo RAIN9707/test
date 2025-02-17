@@ -98,44 +98,7 @@ def calculate_win_probabilities():
 
     return banker_advantage, player_advantage
 
-# **計算下注策略**
-def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, win_streak, lose_streak
-
-    banker_prob, player_prob = monte_carlo_simulation()
-
-    banker_win = random.random() < banker_prob  
-    player_win = not banker_win  
-
-    result = "莊家贏" if banker_win else "閒家贏"
-    win_multiplier = 0.95 if banker_win else 1  
-
-    balance += current_bet * win_multiplier
-    win_streak = win_streak + 1 if banker_win else 0
-    lose_streak = lose_streak + 1 if not banker_win else 0
-
-    history.append({"局數": len(history) + 1, "結果": result, "下注": current_bet, "剩餘資金": balance})
-
-    # **動態調整下注策略**
-    next_bet_target = "莊" if banker_prob > player_prob else "閒"
-    next_bet_amount = current_bet
-
-    if win_streak >= 2:
-        next_bet_amount *= 1.5  # 連勝增加下注
-    elif lose_streak >= 3:
-        next_bet_amount *= 0.7  # 連輸降低風險
-
-    next_bet_amount = max(100, round(next_bet_amount))
-
-    return (
-        f"🎯 本局結果：{result}\n"
-        f"💰 下注金額：${current_bet}\n"
-        f"🏆 剩餘資金：${balance}\n\n"
-        f"🔮 **下一局推薦下注：{next_bet_target}**\n"
-        f"💵 **建議下注金額：${next_bet_amount}**"
-    )
-
-# **處理 Webhook**
+# **Webhook 路由**
 @app.route("/callback", methods=['POST'])
 def callback():
     """ LINE Webhook 入口點，處理來自 LINE 的請求 """
@@ -171,8 +134,11 @@ def handle_message(event):
             reply_text = calculate_best_bet(last_player_score, banker_score)
         else:
             reply_text = "❌ 請輸入正確的莊家數字"
+    elif user_input == "結束":
+        game_active = False
+        reply_text = f"🎉 本次遊戲結束！\n📊 總下注局數：{len(history)}\n💰 最終本金：${balance}"
     else:
-        reply_text = "請輸入「開始」來設定本金"
+        reply_text = "請輸入「開始」來設定本金，或「結束」來結束遊戲"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
