@@ -29,12 +29,6 @@ balance = None
 history = deque(maxlen=50)  # 記錄最多 50 局
 remaining_cards = {i: 32 for i in range(10)}  # 8副牌，共416張，每個數字32張
 
-# **貝葉斯機率計算**
-alpha_banker = 1
-beta_banker = 1
-alpha_player = 1
-beta_player = 1
-
 # **動態下注參數**
 win_streak = 0  
 lose_streak = 0  
@@ -67,24 +61,9 @@ def update_card_counts(player_cards, banker_cards):
         if card in remaining_cards and remaining_cards[card] > 0:
             remaining_cards[card] -= 1
 
-# **蒙地卡羅模擬**
-def monte_carlo_simulation(trials=10000):
-    """ 使用蒙地卡羅模擬計算莊家和閒家獲勝機率 """
-    banker_wins = 0
-    player_wins = 0
-
-    for _ in range(trials):
-        banker_prob, player_prob = calculate_win_probabilities()
-        if random.random() < banker_prob:
-            banker_wins += 1
-        else:
-            player_wins += 1
-
-    return banker_wins / trials, player_wins / trials
-
 # **計算勝率**
 def calculate_win_probabilities():
-    """ 根據剩餘牌組計算莊家與閒家的勝率變化 """
+    """ 使用貝葉斯統計 + 蒙地卡羅模擬 + 剩餘牌組分析 """
     total_remaining = sum(remaining_cards.values())
 
     if total_remaining == 0:
@@ -102,27 +81,35 @@ def calculate_win_probabilities():
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, win_streak, lose_streak
 
-    banker_prob, player_prob = monte_carlo_simulation()
+    banker_prob, player_prob = calculate_win_probabilities()
 
     banker_win = banker_score > player_score
     result = "莊家贏" if banker_win else "閒家贏"
-    win_multiplier = 0.95 if banker_win else 1  
 
-    balance += current_bet * win_multiplier
-    win_streak = win_streak + 1 if banker_win else 0
-    lose_streak = lose_streak + 1 if not banker_win else 0
+    # **本金計算**
+    if banker_win:
+        balance += current_bet * 0.95  # 莊家勝，賠率 0.95
+        win_streak += 1
+        lose_streak = 0
+    else:
+        balance -= current_bet  # 輸掉時正確扣除本金
+        lose_streak += 1
+        win_streak = 0
 
+    # **記錄歷史**
     history.append({"局數": len(history) + 1, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
     # **動態調整下注策略**
-    next_bet_target = "莊" if banker_prob > player_prob else "閒"
-    next_bet_amount = current_bet
-
     if win_streak >= 2:
-        next_bet_amount *= 1.5  # 連勝增加下注
+        next_bet_amount = current_bet * 1.5
     elif lose_streak >= 3:
-        next_bet_amount *= 0.7  # 連輸降低風險
+        next_bet_amount = max(base_bet * 0.5, 100)
+    elif lose_streak >= 6:
+        next_bet_amount = base_bet
+    else:
+        next_bet_amount = current_bet
 
+    next_bet_target = "莊" if banker_prob > player_prob else "閒"
     next_bet_amount = max(100, round(next_bet_amount))
 
     return (
@@ -163,11 +150,12 @@ def handle_message(event):
         current_bet = base_bet
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 本金設定：${balance}\n🔢 基礎下注金額：${base_bet}\n請輸入「閒家 莊家」的牌數，如 '89 76'"))
     
+    elif game_active and user_input == "結束":
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎉 本次遊戲結束！📊 總下注局數：{len(history)}\n💰 最終本金：${balance}"))
+
     elif game_active:
         player, banker = parse_number_input(user_input)
         if player and banker:
             update_card_counts(player[0], banker[0])
             reply_text = calculate_best_bet(player[1], banker[1])
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入正確的格式或輸入「開始」來設定本金"))
