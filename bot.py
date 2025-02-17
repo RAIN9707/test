@@ -78,7 +78,7 @@ def calculate_best_bet(player_cards, banker_cards):
 
     if round_count == 1:
         result = "第一局，不下注，只記錄結果。"
-        history.append({"局數": round_count, "結果": result})
+        history.append({"局數": round_count, "結果": result, "下注": 0, "剩餘資金": balance})
         return f"第 1 局 記錄結果: 閒家 {player_score} - 莊家 {banker_score}。\n下一局開始進行下注。"
 
     if player_score > banker_score:
@@ -132,9 +132,9 @@ def handle_message(event):
     elif user_input.isdigit() and game_active:
         balance = int(user_input)
         base_bet = round(balance * 0.03 / 50) * 50
-        current_bet = base_bet
+        current_bet = 0  # **第一局不下注**
         round_count = 0  # **確保局數從 0 開始**
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n基礎下注金額：${base_bet}\n請輸入「閒家 莊家」的牌數，如 '89 76'"))
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n第一局不下注，請輸入「閒家 莊家」的牌數，如 '89 76'"))
 
     elif game_active and user_input == "結束":
         profit = balance - initial_balance
@@ -145,6 +145,10 @@ def handle_message(event):
         try:
             round_count += 1
             player, banker = [list(map(int, hand)) for hand in user_input.split()]
+            
+            if round_count == 2:  # **從第二局開始下注**
+                current_bet = base_bet
+
             reply_text = calculate_best_bet(player, banker)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
