@@ -28,9 +28,6 @@ current_bet = None
 balance = None
 history = deque(maxlen=50)  # 記錄最多 50 局
 remaining_cards = {i: 32 for i in range(10)}  # 8副牌，共416張，每個數字32張
-waiting_for_player = False
-waiting_for_banker = False
-last_player_score = None  # 記錄閒家計算後的點數
 
 # **貝葉斯機率計算**
 alpha_banker = 1
@@ -42,30 +39,33 @@ beta_player = 1
 win_streak = 0  
 lose_streak = 0  
 
-# **解析數字輸入**
+# **解析輸入格式**
 def parse_number_input(input_str):
-    """ 解析用戶輸入的數字，如 '89' 或 '354'，並計算最終點數 """
+    """ 解析用戶輸入的牌，如 '89 76' 或 '354 908'，並計算點數 """
     try:
-        numbers = [int(digit) for digit in input_str.strip()]
-        if len(numbers) not in [2, 3]:
-            return None, None  # 只能輸入2或3個數字
+        parts = input_str.strip().split()
+        if len(parts) != 2:
+            return None, None  # 必須輸入兩組數字（閒家和莊家）
+
+        player_cards = [int(d) for d in parts[0]]
+        banker_cards = [int(d) for d in parts[1]]
+
+        if len(player_cards) not in [2, 3] or len(banker_cards) not in [2, 3]:
+            return None, None  # 每組只能有 2 或 3 張牌
         
-        final_score = sum(numbers) % 10  # 百家樂點數計算
-        return numbers, final_score
+        player_score = sum(player_cards) % 10
+        banker_score = sum(banker_cards) % 10
+
+        return (player_cards, player_score), (banker_cards, banker_score)
     except ValueError:
         return None, None
 
 # **更新剩餘牌組**
-def update_card_counts(cards):
+def update_card_counts(player_cards, banker_cards):
     """ 記錄本局已出現的牌，減少剩餘張數 """
-    for card in cards:
+    for card in player_cards + banker_cards:
         if card in remaining_cards and remaining_cards[card] > 0:
             remaining_cards[card] -= 1
-
-# **貝葉斯更新**
-def bayesian_update(alpha, beta, history, wins):
-    """ 使用貝葉斯更新機率，調整下注方向 """
-    return beta.rvs(alpha + wins, beta + (len(history) - wins))
 
 # **蒙地卡羅模擬**
 def monte_carlo_simulation(trials=10000):
@@ -98,10 +98,45 @@ def calculate_win_probabilities():
 
     return banker_advantage, player_advantage
 
+# **計算最佳下注策略**
+def calculate_best_bet(player_score, banker_score):
+    global balance, current_bet, win_streak, lose_streak
+
+    banker_prob, player_prob = monte_carlo_simulation()
+
+    banker_win = banker_score > player_score
+    result = "莊家贏" if banker_win else "閒家贏"
+    win_multiplier = 0.95 if banker_win else 1  
+
+    balance += current_bet * win_multiplier
+    win_streak = win_streak + 1 if banker_win else 0
+    lose_streak = lose_streak + 1 if not banker_win else 0
+
+    history.append({"局數": len(history) + 1, "結果": result, "下注": current_bet, "剩餘資金": balance})
+
+    # **動態調整下注策略**
+    next_bet_target = "莊" if banker_prob > player_prob else "閒"
+    next_bet_amount = current_bet
+
+    if win_streak >= 2:
+        next_bet_amount *= 1.5  # 連勝增加下注
+    elif lose_streak >= 3:
+        next_bet_amount *= 0.7  # 連輸降低風險
+
+    next_bet_amount = max(100, round(next_bet_amount))
+
+    return (
+        f"🎯 本局結果：{result}\n"
+        f"💰 下注金額：${current_bet}\n"
+        f"🏆 剩餘資金：${balance}\n\n"
+        f"🔮 **下一局推薦下注：{next_bet_target}**\n"
+        f"💵 **建議下注金額：${next_bet_amount}**"
+    )
+
 # **Webhook 路由**
 @app.route("/callback", methods=['POST'])
 def callback():
-    """ LINE Webhook 入口點，處理來自 LINE 的請求 """
+    """ LINE Webhook 入口點 """
     signature = request.headers.get("X-Line-Signature")
     body = request.get_data(as_text=True)
 
@@ -114,34 +149,25 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, waiting_for_player, waiting_for_banker, last_player_score
+    global game_active, balance, base_bet, current_bet
 
     user_input = event.message.text.strip().lower()
     
     if user_input == "開始":
         game_active = True
-        waiting_for_player = True
-        reply_text = "請輸入您的本金金額，例如：5000"
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+    
     elif user_input.isdigit() and game_active:
-        last_player_score = int(user_input)
-        waiting_for_player = False
-        waiting_for_banker = True
-        reply_text = "請輸入**莊家發牌**（如：67 或 805）"
-    elif waiting_for_banker:
-        _, banker_score = parse_number_input(user_input)
-        if banker_score is not None:
-            waiting_for_banker = False
-            reply_text = calculate_best_bet(last_player_score, banker_score)
-        else:
-            reply_text = "❌ 請輸入正確的莊家數字"
-    elif user_input == "結束":
-        game_active = False
-        reply_text = f"🎉 本次遊戲結束！\n📊 總下注局數：{len(history)}\n💰 最終本金：${balance}"
-    else:
-        reply_text = "請輸入「開始」來設定本金，或「結束」來結束遊戲"
+        balance = int(user_input)
+        base_bet = round(balance * 0.03 / 50) * 50
+        current_bet = base_bet
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 本金設定：${balance}\n🔢 基礎下注金額：${base_bet}\n請輸入「閒家 莊家」的牌數，如 '89 76'"))
+    
+    elif game_active:
+        player, banker = parse_number_input(user_input)
+        if player and banker:
+            update_card_counts(player[0], banker[0])
+            reply_text = calculate_best_bet(player[1], banker[1])
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入正確的格式或輸入「開始」來設定本金"))
