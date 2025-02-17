@@ -22,6 +22,9 @@ current_bet = None
 balance = None
 history = deque(maxlen=50)  # 記錄最多 50 局
 remaining_cards = {i: 32 for i in range(10)}  # 8副牌，共416張，每個數字32張
+waiting_for_player = False
+waiting_for_banker = False
+last_player_cards = None  # 記錄閒家輸入的牌
 
 # **獲利鎖定與回撤保護**
 profit_target = None  
@@ -42,29 +45,6 @@ def update_card_counts(cards):
         if value is not None and remaining_cards[value] > 0:
             remaining_cards[value] -= 1
 
-# **解析牌輸入**
-def parse_card_input(input_str):
-    """ 解析用戶輸入的莊家與閒家牌，如 'AJ / K8J' """
-    try:
-        parts = input_str.split("/")
-        if len(parts) != 2:
-            return None, None
-        
-        player_cards = parts[0].strip().upper()
-        banker_cards = parts[1].strip().upper()
-
-        # 計算點數
-        player_score = sum(card_values.get(card, 0) for card in player_cards) % 10
-        banker_score = sum(card_values.get(card, 0) for card in banker_cards) % 10
-
-        # 更新剩餘牌組
-        update_card_counts(player_cards)
-        update_card_counts(banker_cards)
-
-        return player_score, banker_score
-    except Exception:
-        return None, None
-
 # **計算勝率**
 def calculate_win_probabilities():
     """ 根據剩餘牌組計算莊家與閒家的勝率變化 """
@@ -81,6 +61,16 @@ def calculate_win_probabilities():
 
     return banker_advantage, player_advantage
 
+# **解析牌輸入**
+def parse_card_input(input_str):
+    """ 解析用戶輸入的牌，如 'AJ' 或 'K8J' """
+    try:
+        cards = input_str.strip().upper()
+        score = sum(card_values.get(card, 0) for card in cards) % 10
+        return cards, score
+    except Exception:
+        return None, None
+
 # **計算下注策略**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet
@@ -96,16 +86,29 @@ def calculate_best_bet(player_score, banker_score):
     balance += current_bet * win_multiplier
     history.append({"局數": len(history) + 1, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    return f"🎯 本局結果：{result}\n💰 下注金額：${current_bet}\n🏆 剩餘資金：${balance}"
+    # **計算下一局下注策略**
+    next_bet_target = "莊" if banker_prob > player_prob else "閒"
+    next_bet_amount = round(current_bet * (1.2 if banker_win else 0.8))  # 連勝加注，連輸減注
+    next_bet_amount = max(100, next_bet_amount)  # 最小下注額 100
+
+    return (
+        f"🎯 本局結果：{result}\n"
+        f"💰 下注金額：${current_bet}\n"
+        f"🏆 剩餘資金：${balance}\n\n"
+        f"🔮 **下一局推薦下注：{next_bet_target}**\n"
+        f"💵 **建議下注金額：${next_bet_amount}**"
+    )
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, initial_balance, balance, base_bet, current_bet, profit_target, loss_threshold, recovery_threshold
+    global game_active, waiting_for_player, waiting_for_banker, last_player_cards
+    global initial_balance, balance, base_bet, current_bet, profit_target, loss_threshold, recovery_threshold
 
     user_input = event.message.text.strip().lower()
     
     if user_input == "開始":
         game_active = True
+        waiting_for_player = True
         reply_text = "請輸入您的本金金額，例如：5000"
     elif user_input.isdigit() and game_active and initial_balance is None:
         initial_balance = int(user_input)
@@ -115,33 +118,29 @@ def handle_message(event):
         profit_target = initial_balance * 2
         loss_threshold = initial_balance * 0.6
         recovery_threshold = initial_balance * 0.8
-        reply_text = f"🎯 設定成功！\n💰 本金：${initial_balance}\n🃏 建議單注金額：${base_bet}\n請輸入莊家與閒家的發牌（格式：AJ / K8J）"
+        reply_text = f"🎯 設定成功！\n💰 本金：${initial_balance}\n🃏 建議單注金額：${base_bet}\n請輸入**閒家發牌**（例如：AJ）"
+    elif game_active and waiting_for_player:
+        last_player_cards, player_score = parse_card_input(user_input)
+        if last_player_cards:
+            waiting_for_player = False
+            waiting_for_banker = True
+            reply_text = "✅ 閒家發牌成功！\n請輸入**莊家發牌**（例如：K8J）"
+        else:
+            reply_text = "❌ 請輸入正確的閒家牌（如：AJ）"
+    elif game_active and waiting_for_banker:
+        banker_cards, banker_score = parse_card_input(user_input)
+        if banker_cards:
+            waiting_for_banker = False
+            reply_text = calculate_best_bet(player_score, banker_score)
+        else:
+            reply_text = "❌ 請輸入正確的莊家牌（如：K8J）"
     elif user_input == "結束":
         game_active = False
         win_count = sum(1 for h in history if h["結果"] == "莊家贏")
         lose_count = len(history) - win_count
         reply_text = f"🎉 遊戲結束！\n💰 最終資本金額：${balance}\n📈 總局數：{len(history)}\n✅ 莊家勝局數：{win_count}\n❌ 閒家勝局數：{lose_count}"
-    elif game_active and initial_balance is not None:
-        player_score, banker_score = parse_card_input(user_input)
-        if player_score is not None and banker_score is not None:
-            reply_text = calculate_best_bet(player_score, banker_score)
-        else:
-            reply_text = "❌ 請輸入正確格式（例如：AJ / K8J 代表閒家 A、J，莊家 K、8、J）"
     else:
         reply_text = "請輸入「開始」來設定本金，或「結束」來結束遊戲！"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-@app.route("/callback", methods=["POST"])
-def callback():
-    signature = request.headers["X-Line-Signature"]
-    body = request.get_data(as_text=True)
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        return "Invalid signature", 400
-    return "OK"
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
