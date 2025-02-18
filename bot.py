@@ -167,16 +167,3 @@ def handle_message(event):
     elif game_active and user_input == "結束":
         result_text = f"💵 本次遊戲結束，剩餘資金：${balance}"
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result_text))
-
-    elif game_active:
-        try:
-            round_count += 1
-            player_score, banker_score = map(int, user_input.split())
-
-            if round_count == 2:  
-                current_bet = base_bet
-
-            reply_text = calculate_best_bet(player_score, banker_score)
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
