@@ -33,7 +33,7 @@ history = deque(maxlen=50)
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **計算勝率**
+# **勝率計算**
 def calculate_win_probabilities():
     banker_advantage = 0.5068 + random.uniform(-0.015, 0.015)  
     banker_advantage = max(0.48, min(0.52, banker_advantage))  
@@ -43,6 +43,8 @@ def calculate_win_probabilities():
 def update_bet_amount():
     global next_bet_amount, current_bet, total_wins, total_losses, round_count
 
+    banker_prob, player_prob = calculate_win_probabilities()
+
     if round_count <= 3:
         next_bet_amount = base_bet  
     else:
@@ -50,8 +52,12 @@ def update_bet_amount():
             next_bet_amount = base_bet  
         elif total_wins >= 2:
             next_bet_amount = current_bet * 1.5  
+        elif banker_prob > 0.52:
+            next_bet_amount = current_bet * 1.5  
+        elif banker_prob < 0.48:
+            next_bet_amount = current_bet * 0.75  
         else:
-            next_bet_amount = current_bet * 1.25  
+            next_bet_amount = current_bet  
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
     current_bet = next_bet_amount  
@@ -85,7 +91,7 @@ def calculate_best_bet(player_score, banker_score):
         balance -= current_bet  
 
     history.append({
-        "局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance, "下注結果": bet_result
+        "局數": round_count, "結果": result, "剩餘資金": balance, "下注結果": bet_result
     })
 
     update_bet_amount()  
@@ -96,16 +102,17 @@ def calculate_best_bet(player_score, banker_score):
             f"📌 第 1 局結果：{result}（僅記錄，不下注）\n\n"
             f"✅ **第 2 局下注建議**\n"
             f"🎯 下注目標：{previous_suggestion}\n"
+            f"📊 勝率 - 閒家: {player_prob:.2%}, 莊家: {banker_prob:.2%}\n"
             f"💰 下注金額：${next_bet_amount}"
         )
 
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
         f"🎲 下注結果：{bet_result}\n"
-        f"💰 下注金額：${current_bet}\n"
         f"💵 剩餘資金：${balance}\n\n"
         f"✅ **第 {round_count + 1} 局下注建議**\n"
         f"🎯 下注目標：{previous_suggestion}\n"
+        f"📊 勝率 - 閒家: {player_prob:.2%}, 莊家: {banker_prob:.2%}\n"
         f"💰 下注金額：${next_bet_amount}"
     )
 
