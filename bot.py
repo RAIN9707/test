@@ -27,6 +27,7 @@ current_bet = None
 balance = None
 total_wins = 0
 total_losses = 0
+total_ties = 0
 round_count = 0
 history = deque(maxlen=50)
 previous_suggestion = None  
@@ -40,21 +41,24 @@ def calculate_win_probabilities():
 
 # **更新下注金額**
 def update_bet_amount():
-    global next_bet_amount, current_bet, total_wins, total_losses
+    global next_bet_amount, current_bet, total_wins, total_losses, round_count
 
-    if total_losses >= 3:
-        next_bet_amount = base_bet
-    elif total_wins >= 2:
-        next_bet_amount = current_bet * 1.5
+    if round_count <= 3:
+        next_bet_amount = base_bet  
     else:
-        next_bet_amount = current_bet * 1.25
+        if total_losses >= 3:
+            next_bet_amount = base_bet  
+        elif total_wins >= 2:
+            next_bet_amount = current_bet * 1.5  
+        else:
+            next_bet_amount = current_bet * 1.25  
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
     current_bet = next_bet_amount  
 
 # **計算最佳下注**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
+    global balance, current_bet, total_wins, total_losses, total_ties, round_count, previous_suggestion, next_bet_amount
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -66,6 +70,7 @@ def calculate_best_bet(player_score, banker_score):
         total_losses += 1
     else:
         result = "和局"
+        total_ties += 1
 
     bet_result = "❌ 錯誤"
     if previous_suggestion == "莊" and result == "莊家贏":
@@ -152,10 +157,6 @@ def handle_message(event):
         try:
             round_count += 1
             player_score, banker_score = map(int, user_input.split())
-
-            if round_count == 2:  
-                current_bet = base_bet
-
             reply_text = calculate_best_bet(player_score, banker_score)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
