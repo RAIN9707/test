@@ -71,19 +71,19 @@ def calculate_best_bet(player_score, banker_score):
     if previous_suggestion == "莊" and result == "莊家贏":
         balance += current_bet * 0.95  
         bet_result = "✅ 正確"
+        wrong_streak = 0  
+        current_bet = base_bet  
     elif previous_suggestion == "閒" and result == "閒家贏":
         balance += current_bet  
         bet_result = "✅ 正確"
+        wrong_streak = 0  
+        current_bet = base_bet  
     elif result == "和局":
         bet_result = "🔄 和局 - 本金不變"
     else:
         balance -= current_bet  
-        loss_streak += 1  
         wrong_streak += 1  
-
-    # **資金低於 2000，固定下注最低金額**
-    if balance < 2000:
-        current_bet = base_bet
+        current_bet *= 2  
 
     # **連續 4 次錯誤，重置下注金額**
     if wrong_streak >= 4:
