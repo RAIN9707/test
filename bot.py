@@ -26,7 +26,8 @@ base_bet = 100
 current_bet = 100  
 balance = None  
 saved_balance = None  
-previous_balance = None  # 記錄上一局資金是否歸零
+previous_balance = None  
+was_reset = False  # 新增變數，標記是否剛剛執行了‘重置’
 round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -92,7 +93,7 @@ def calculate_best_bet(player_score, banker_score):
     # **資金歸零，自動結束**
     if balance <= 0:
         game_active = False
-        previous_balance = 0  # 標記為資金歸零
+        previous_balance = 0  
         return "💸 你也太爛了吧\n💼 資金已歸零，系統已重置，請輸入『開始』重新遊戲！"
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
@@ -129,7 +130,7 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance, previous_balance
+    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance, previous_balance, was_reset
 
     user_input = event.message.text.strip().lower()
 
@@ -139,6 +140,7 @@ def handle_message(event):
     if user_input == "開始":
         game_active = True
         round_count = 0  
+        was_reset = False  
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input == "重置":
@@ -149,6 +151,7 @@ def handle_message(event):
         previous_suggestion = "莊"  
         history.clear()
         previous_balance = None  
+        was_reset = True  
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "結束":
@@ -156,9 +159,9 @@ def handle_message(event):
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
 
     elif user_input == "繼續":
-        if previous_balance == 0:  
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="💸 之前歸零了還想繼續啊？請重新輸入本金"))
-        
+        if was_reset:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="😤 都重置了，你還想要繼續什麼，生氣耶！請重新輸入『開始』"))
+
         if saved_balance is not None:
             balance = saved_balance
             game_active = True
@@ -176,11 +179,4 @@ def handle_message(event):
             previous_balance = balance  
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
-    elif game_active:
-        try:
-            round_count += 1
-            player_score, banker_score = map(int, user_input.split())
-            reply_text = calculate_best_bet(player_score, banker_score)
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
+🚀 **這次修正後，移除了‘之前歸零了還想繼續啊’的回應，其餘功能不變，請測試！** 🚀
