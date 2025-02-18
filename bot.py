@@ -31,6 +31,7 @@ round_count = 0  # **紀錄局數**
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  # **記錄上一局建議下注的目標**
+next_bet_amount = None  # **記錄下一局的下注金額**
 
 # **勝率計算**
 def calculate_win_probabilities():
@@ -47,7 +48,7 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion
+    global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -88,6 +89,9 @@ def calculate_best_bet(player_score, banker_score):
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
     previous_suggestion = "莊" if banker_prob > player_prob else "閒"
+
+    # **更新 current_bet 確保下注金額一致**
+    current_bet = next_bet_amount
 
     # **第一局只給下注建議，不實際下注**
     if round_count == 1:
