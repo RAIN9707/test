@@ -123,25 +123,33 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, balance, base_bet, current_bet, total_wins, total_losses, round_count
+    global game_active, balance, base_bet, current_bet, total_wins, total_losses, round_count, initial_balance
 
     user_input = event.message.text.strip().lower()
 
     if user_input == "開始":
         game_active = True
         round_count = 0  # **重設局數**
+        if balance is not None:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"使用上次剩餘資金 ${balance}\n請輸入「閒家 莊家」的點數，如 '8 9'"))
+        else:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+
+    elif user_input == "從頭開始":
+        game_active = True
+        balance = None
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input.isdigit() and game_active:
         balance = int(user_input)
+        initial_balance = balance
         base_bet = round(balance * 0.03 / 50) * 50
         current_bet = 0  # **第一局不下注**
         round_count = 0  # **確保局數從 0 開始**
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n第一局不下注，請輸入「閒家 莊家」的點數，如 '8 9'"))
 
     elif game_active and user_input == "結束":
-        profit = balance - initial_balance
-        result_text = f"💵 本次遊戲結果：{'賺' if profit > 0 else '虧'} ${abs(profit)}"
+        result_text = f"💵 本次遊戲結束，剩餘資金：${balance}"
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result_text))
 
     elif game_active:
