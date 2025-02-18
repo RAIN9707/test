@@ -126,8 +126,54 @@ def calculate_best_bet(player_score, banker_score):
         f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%, 和 {tie_prob*100:.2f}%"
     )
 
-# **結束時回覆贏/輸金額**
-def end_game():
-    profit = balance - initial_balance
-    result_text = f"🎉 遊戲結束！總資金：${balance}，盈利：${profit}" if profit >= 0 else f"💸 遊戲結束！總資金：${balance}，虧損：${profit}"
-    return result_text
+# **Webhook**
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers.get("X-Line-Signature")
+    body = request.get_data(as_text=True)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+
+    return "OK", 200
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance
+
+    user_input = event.message.text.strip().lower()
+
+    if not game_active and user_input != "開始":
+        return  
+
+    if user_input == "開始":
+        game_active = True
+        round_count = 0  
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+        return
+
+    elif user_input == "重置":
+        game_active = False
+        balance = None
+        base_bet = 100  
+        current_bet = 100  
+        previous_suggestion = "莊"  
+        history.clear()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
+        return
+
+    elif user_input == "結束":
+        game_active = False
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
+        return
+
+    elif game_active:
+        try:
+            round_count += 1
+            player_score, banker_score = map(int, user_input.split())
+            reply_text = calculate_best_bet(player_score, banker_score)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        except:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
