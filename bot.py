@@ -88,24 +88,23 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet  
 
-    # **資金歸零，自動結束**
-    if balance <= 0:
-        game_active = False
-        return "💸 去充錢吧！"
-
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
     update_base_bet()
+    previous_suggestion = "莊" if banker_prob > player_prob else "閒"
 
-    if round_count == 1:
-        previous_suggestion = "莊"
-    else:
-        previous_suggestion = "莊" if banker_prob > player_prob else "閒"
-
-    return (
+    result_text = (
         f"📌 第 {round_count} 局結果：{result}\n"
         f"🎲 下注結果：{bet_result}\n"
         f"💵 剩餘資金：${balance}\n\n"
+    )
+
+    # **資金歸零，回覆下注結果後，再提示充錢**
+    if balance <= 0:
+        game_active = False
+        return result_text + "💸 去充錢吧！"
+
+    return result_text + (
         f"✅ **第 {round_count + 1} 局下注建議**\n"
         f"🎯 下注目標：{previous_suggestion}\n"
         f"💰 下注金額：${current_bet}\n"
