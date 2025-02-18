@@ -158,22 +158,19 @@ def handle_message(event):
         game_active = False
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
 
-    elif user_input == "繼續":
-        if was_reset:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="😤 都重置了，你還想要繼續什麼，生氣耶！請重新輸入『開始』"))
+    elif game_active and user_input.replace(" ", "").isdigit():
+        try:
+            player_score, banker_score = map(int, user_input.split())
 
-        if saved_balance is not None:
-            balance = saved_balance
-            game_active = True
-            round_count = 0  
-            update_base_bet()
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 繼續遊戲，資金：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
-        else:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無儲存的資金，請輸入『開始』重新遊戲"))
+            if round_count == 0:
+                round_count += 1
+                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📌 第一局記錄結果，請輸入下一局點數"))
 
-    elif game_active and user_input.isdigit():
-        balance = int(user_input)
-        initial_balance = balance
-        update_base_bet()
-        previous_balance = balance  
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+            round_count += 1
+            reply_text = calculate_best_bet(player_score, banker_score)
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+
+        except ValueError:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入格式錯誤，請輸入兩個數字，例如 '8 9'"))
+
+    return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無效指令，請輸入正確內容"))
