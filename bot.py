@@ -19,7 +19,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# **遊戲狀態變數**
+# **遊戲變數**
 game_active = False
 initial_balance = None
 base_bet = None
@@ -29,27 +29,30 @@ total_wins = 0
 total_losses = 0
 round_count = 0
 history = deque(maxlen=50)
-remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **計算剩餘牌組影響的勝率**
+# **計算勝率**
 def calculate_win_probabilities():
-    total_remaining = sum(remaining_cards.values())
-    if total_remaining == 0:
-        return 0.5068, 0.4932  
-
-    high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
-    low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
-    neutral_card_ratio = (remaining_cards[6] + remaining_cards[7]) / total_remaining
-
-    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
-
-    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
+    banker_advantage = 0.5068 + random.uniform(-0.015, 0.015)  
     banker_advantage = max(0.48, min(0.52, banker_advantage))  
     return banker_advantage, 1 - banker_advantage
 
-# **下注策略計算**
+# **更新下注金額**
+def update_bet_amount():
+    global next_bet_amount, current_bet, total_wins, total_losses
+
+    if total_losses >= 3:
+        next_bet_amount = base_bet
+    elif total_wins >= 2:
+        next_bet_amount = current_bet * 1.5
+    else:
+        next_bet_amount = current_bet * 1.25
+
+    next_bet_amount = round(next_bet_amount / 50) * 50  
+    current_bet = next_bet_amount  
+
+# **計算最佳下注**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
 
@@ -76,27 +79,12 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet  
 
-    history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
+    history.append({
+        "局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance, "下注結果": bet_result
+    })
 
-    if banker_prob > player_prob:
-        previous_suggestion = "莊" if random.random() > 0.5 else "閒"
-    else:
-        previous_suggestion = "閒" if random.random() > 0.5 else "莊"
-
-    if round_count == 1:
-        next_bet_amount = base_bet  
-    else:
-        if total_losses >= 3:
-            next_bet_amount = base_bet
-        elif total_wins >= 2:
-            next_bet_amount = current_bet * 1.5
-        else:
-            next_bet_amount = current_bet * 1.25
-
-    next_bet_amount = round(next_bet_amount / 50) * 50  
-
-    # **修正下注金額不同步的問題**
-    current_bet = next_bet_amount  
+    update_bet_amount()  
+    previous_suggestion = "莊" if banker_prob > player_prob else "閒"
 
     if round_count == 1:
         return (
@@ -166,7 +154,7 @@ def handle_message(event):
             player_score, banker_score = map(int, user_input.split())
 
             if round_count == 2:  
-                current_bet = base_bet  
+                current_bet = base_bet
 
             reply_text = calculate_best_bet(player_score, banker_score)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
