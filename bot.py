@@ -26,8 +26,6 @@ base_bet = 100
 current_bet = 100  
 balance = None  
 saved_balance = None  
-previous_balance = None  
-was_reset = False  
 round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -67,7 +65,7 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, previous_suggestion, game_active, previous_balance
+    global balance, current_bet, round_count, previous_suggestion, game_active
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -93,8 +91,7 @@ def calculate_best_bet(player_score, banker_score):
     # **資金歸零，自動結束**
     if balance <= 0:
         game_active = False
-        previous_balance = 0  
-        return "💸 你也太爛了吧\n💼 資金已歸零，系統已重置，請輸入『開始』重新遊戲！"
+        return "💸 去充錢吧！"
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
@@ -130,7 +127,7 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance, previous_balance, was_reset
+    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance
 
     user_input = event.message.text.strip().lower()
 
@@ -140,7 +137,6 @@ def handle_message(event):
     if user_input == "開始":
         game_active = True
         round_count = 0  
-        was_reset = False  
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input == "重置":
@@ -150,27 +146,38 @@ def handle_message(event):
         current_bet = 100  
         previous_suggestion = "莊"  
         history.clear()
-        previous_balance = None  
-        was_reset = True  
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
+
+    elif user_input == "休息":
+        saved_balance = balance  
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 休息中，當前資金：${balance}"))
+
+    elif user_input == "繼續":
+        if saved_balance is not None:
+            balance = saved_balance
+            game_active = True
+            round_count = 0  
+            update_base_bet()
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 繼續遊戲，資金：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+        else:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無儲存的資金，請輸入『開始』重新遊戲"))
 
     elif user_input == "結束":
         game_active = False
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
 
-    elif game_active and user_input.replace(" ", "").isdigit():
+    elif game_active and user_input.isdigit():
+        if balance is None:
+            balance = int(user_input)
+            initial_balance = balance
+            update_base_bet()
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+
+    elif game_active:
         try:
-            player_score, banker_score = map(int, user_input.split())
-
-            if round_count == 0:
-                round_count += 1
-                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📌 第一局記錄結果，請輸入下一局點數"))
-
             round_count += 1
+            player_score, banker_score = map(int, user_input.split())
             reply_text = calculate_best_bet(player_score, banker_score)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-
-        except ValueError:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入格式錯誤，請輸入兩個數字，例如 '8 9'"))
-
-    return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無效指令，請輸入正確內容"))
+        except:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
