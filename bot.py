@@ -80,12 +80,12 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet  
         wrong_streak += 1  
-        current_bet *= 2  
 
-    # **當連續錯誤 5 次，下注金額 100% 重置為最低金額**
-    if wrong_streak >= 5:
-        current_bet = base_bet
-        wrong_streak = 0  
+        if wrong_streak >= 5:  # **當連續錯誤 5 次時，下注金額 100% 重置**
+            current_bet = base_bet
+            wrong_streak = 0  
+        else:
+            current_bet *= 2  
 
     # **資金為 0，自動結束程序**
     if balance <= 0:
