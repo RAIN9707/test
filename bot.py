@@ -179,4 +179,3 @@ def handle_message(event):
             previous_balance = balance  
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
-🚀 **這次修正後，移除了‘之前歸零了還想繼續啊’的回應，其餘功能不變，請測試！** 🚀
