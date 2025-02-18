@@ -172,5 +172,3 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
-
-🚀 **現在勝率計算更精確，下注邏輯更穩定，試試看吧！** 🚀
