@@ -150,3 +150,5 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
+
+🚀 **這次修正後，確保本金輸入後立即回覆，並正確執行 Martingale System 翻倍下注策略！** 🚀
