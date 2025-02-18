@@ -33,7 +33,7 @@ remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **勝率計算（考慮最近 5-10 局趨勢）**
+# **勝率計算**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
@@ -51,7 +51,7 @@ def calculate_win_probabilities():
     banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
     return banker_advantage, 1 - banker_advantage
 
-# **下注策略修正**
+# **下注策略**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
 
@@ -80,6 +80,22 @@ def calculate_best_bet(player_score, banker_score):
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
+    # **確保和局後仍然顯示下注建議**
+    if result == "和局":
+        if random.random() > 0.5:
+            previous_suggestion = "莊"
+        else:
+            previous_suggestion = "閒"
+        return (
+            f"📌 第 {round_count} 局結果：{result}\n"
+            f"🎲 下注結果：{bet_result}\n"
+            f"💵 剩餘資金：${balance}\n\n"
+            f"✅ **第 {round_count + 1} 局下注建議**\n"
+            f"🎯 下注目標：{previous_suggestion}\n"
+            f"💰 下注金額：${current_bet}\n"
+            f"📊 勝率分析：莊 {banker_prob:.2%}, 閒 {player_prob:.2%}"
+        )
+
     if banker_prob > player_prob:
         previous_suggestion = "莊"
     else:
@@ -99,15 +115,6 @@ def calculate_best_bet(player_score, banker_score):
 
     # **確保下注金額與建議同步**
     current_bet = next_bet_amount  
-
-    if round_count == 1:
-        return (
-            f"📌 第 1 局結果：{result}（僅記錄，不下注）\n\n"
-            f"✅ **第 2 局下注建議**\n"
-            f"🎯 下注目標：{previous_suggestion}\n"
-            f"💰 下注金額：${next_bet_amount}\n"
-            f"📊 勝率分析：莊 {banker_prob:.2%}, 閒 {player_prob:.2%}"
-        )
 
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
