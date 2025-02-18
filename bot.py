@@ -27,7 +27,7 @@ current_bet = 100
 balance = None  
 saved_balance = None  
 previous_balance = None  
-was_reset = False  # 新增變數，標記是否剛剛執行了‘重置’
+was_reset = False  
 round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -172,10 +172,8 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無儲存的資金，請輸入『開始』重新遊戲"))
 
     elif game_active and user_input.isdigit():
-        if balance is None:
-            balance = int(user_input)
-            initial_balance = balance
-            update_base_bet()
-            previous_balance = balance  
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
-
+        balance = int(user_input)
+        initial_balance = balance
+        update_base_bet()
+        previous_balance = balance  
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
