@@ -185,3 +185,12 @@ def handle_message(event):
         game_active = False
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
         return
+
+    elif game_active and user_input.isdigit():
+        if balance is None:
+            balance = int(user_input)
+            initial_balance = balance
+            update_base_bet()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+            return
+
