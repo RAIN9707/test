@@ -135,26 +135,28 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance
+    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance, previous_suggestion
 
     user_input = event.message.text.strip().lower()
 
     if not game_active and user_input != "開始":
-        return  
+        return
 
     if user_input == "開始":
         game_active = True
-        round_count = 0  
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+        round_count = 0
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+        return
 
     elif user_input == "重置":
         game_active = False
         balance = None
-        base_bet = 100  
-        current_bet = 100  
-        previous_suggestion = "莊"  
+        base_bet = 100
+        current_bet = 100
+        previous_suggestion = "莊"  # 重置時將 previous_suggestion 設為 "莊"
         history.clear()
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
+        return
 
     elif user_input == "休息":
         saved_balance = balance  
