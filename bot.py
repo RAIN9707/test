@@ -33,7 +33,7 @@ remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **勝率計算**
+# **精細勝率計算**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
@@ -46,11 +46,10 @@ def calculate_win_probabilities():
     trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
 
     banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
-    variance = random.uniform(-0.015, 0.015)
-    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
+    banker_advantage = max(0.48, min(0.52, banker_advantage))  
     return banker_advantage, 1 - banker_advantage
 
-# **下注策略**
+# **下注策略計算**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
 
@@ -90,12 +89,20 @@ def calculate_best_bet(player_score, banker_score):
         if total_losses >= 3:
             next_bet_amount = base_bet
         elif total_wins >= 2:
-            next_bet_amount = current_bet * (1.5 if previous_suggestion == "莊" else 1.75)
+            next_bet_amount = current_bet * 1.5
         else:
-            next_bet_amount = current_bet * (1.25 if previous_suggestion == "莊" else 1.5)
+            next_bet_amount = current_bet * 1.25
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
     current_bet = next_bet_amount  
+
+    if round_count == 1:
+        return (
+            f"📌 第 1 局結果：{result}（僅記錄，不下注）\n\n"
+            f"✅ **第 2 局下注建議**\n"
+            f"🎯 下注目標：{previous_suggestion}\n"
+            f"💰 下注金額：${next_bet_amount}"
+        )
 
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
@@ -130,14 +137,14 @@ def handle_message(event):
         game_active = True
         round_count = 0  
         if balance is not None:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"使用上次剩餘資金 ${balance}\n請輸入「閒家 莊家」的點數，如 '8 9'"))
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"使用上次剩餘資金 ${balance}\n請輸入「閒家 莊家」的點數，如 '8 9'"))
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input == "從頭開始":
         game_active = True
         balance = None
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input.isdigit() and game_active:
         balance = int(user_input)
@@ -145,11 +152,11 @@ def handle_message(event):
         base_bet = round(balance * 0.03 / 50) * 50
         current_bet = 0  
         round_count = 0  
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n第一局不下注，請輸入「閒家 莊家」的點數，如 '8 9'"))
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n第一局不下注，請輸入「閒家 莊家」的點數，如 '8 9'"))
 
     elif game_active and user_input == "結束":
         result_text = f"💵 本次遊戲結束，剩餘資金：${balance}"
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result_text))
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result_text))
 
     elif game_active:
         try:
@@ -160,6 +167,6 @@ def handle_message(event):
                 current_bet = base_bet
 
             reply_text = calculate_best_bet(player_score, banker_score)
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
