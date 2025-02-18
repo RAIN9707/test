@@ -140,6 +140,7 @@ def handle_message(event):
     elif user_input == "重置":
         game_active = False
         balance = None
+        previous_suggestion = "莊"  # **重置後的第 1 局應該下注莊家**
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "休息":
@@ -165,7 +166,10 @@ def handle_message(event):
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
     elif game_active:
-        round_count += 1
-        player_score, banker_score = map(int, user_input.split())
-        reply_text = calculate_best_bet(player_score, banker_score)
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        try:
+            round_count += 1
+            player_score, banker_score = map(int, user_input.split())
+            reply_text = calculate_best_bet(player_score, banker_score)
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        except:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
