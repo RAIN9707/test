@@ -27,8 +27,6 @@ current_bet = 100
 balance = None  
 saved_balance = None  
 round_count = 0  
-win_streak = 0
-lose_streak = 0
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = "莊"  
@@ -52,7 +50,7 @@ def update_base_bet():
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
-        return 0.5068, 0.4932, 0.00  
+        return 0.5068, 0.4932  
 
     high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
     low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
@@ -62,29 +60,21 @@ def calculate_win_probabilities():
 
     banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
     variance = random.uniform(-0.015, 0.015)
-    banker_advantage = max(0.47, min(0.53, banker_advantage + variance))  
-    tie_probability = 1 - (banker_advantage + (1 - banker_advantage))
-    
-    return banker_advantage, 1 - banker_advantage - tie_probability, tie_probability
+    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
+    return banker_advantage, 1 - banker_advantage
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, previous_suggestion, game_active, win_streak, lose_streak
+    global balance, current_bet, round_count, previous_suggestion, game_active
 
-    banker_prob, player_prob, tie_prob = calculate_win_probabilities()
+    banker_prob, player_prob = calculate_win_probabilities()
 
     if player_score > banker_score:
         result = "閒家贏"
-        win_streak += 1
-        lose_streak = 0
     elif banker_score > player_score:
         result = "莊家贏"
-        win_streak = 0
-        lose_streak += 1
     else:
         result = "和局"
-        win_streak = 0
-        lose_streak = 0
 
     bet_result = "❌ 錯誤"
     if previous_suggestion == "莊" and result == "莊家贏":
@@ -98,13 +88,20 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet  
 
-    if balance <= 0:
-        game_active = False
-        return "💸 你也太爛了吧！"
-
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
     update_base_bet()
+
+    # **最近 5 局趨勢**
+    last_5_games = list(history)[-5:]
+    banker_wins = sum(1 for h in last_5_games if h["結果"] == "莊家贏")
+    player_wins = sum(1 for h in last_5_games if h["結果"] == "閒家贏")
+
+    if round_count >= 3:
+        if banker_wins >= 4:
+            banker_prob += 0.02  
+        if player_wins >= 4:
+            player_prob += 0.02  
 
     if banker_prob > 0.57:
         previous_suggestion = "莊"
@@ -113,9 +110,6 @@ def calculate_best_bet(player_score, banker_score):
     else:
         previous_suggestion = "莊" if banker_prob > player_prob else "閒"
 
-    if lose_streak >= 4:
-        current_bet = base_bet  
-
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
         f"🎲 下注結果：{bet_result}\n"
@@ -123,7 +117,7 @@ def calculate_best_bet(player_score, banker_score):
         f"✅ **第 {round_count + 1} 局下注建議**\n"
         f"🎯 下注目標：{previous_suggestion}\n"
         f"💰 下注金額：${current_bet}\n"
-        f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%, 和 {tie_prob*100:.2f}%"
+        f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%"
     )
 
 # **Webhook**
@@ -151,29 +145,21 @@ def handle_message(event):
     if user_input == "開始":
         game_active = True
         round_count = 0  
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
-        return
-
-    elif user_input == "重置":
-        game_active = False
-        balance = None
-        base_bet = 100  
-        current_bet = 100  
-        previous_suggestion = "莊"  
-        history.clear()
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
-        return
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input == "結束":
         game_active = False
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
-        return
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
+
+    elif game_active and user_input.isdigit():
+        if balance is None:
+            balance = int(user_input)
+            initial_balance = balance
+            update_base_bet()
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
     elif game_active:
-        try:
-            round_count += 1
-            player_score, banker_score = map(int, user_input.split())
-            reply_text = calculate_best_bet(player_score, banker_score)
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
+        round_count += 1
+        player_score, banker_score = map(int, user_input.split())
+        reply_text = calculate_best_bet(player_score, banker_score)
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
