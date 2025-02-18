@@ -94,6 +94,8 @@ def calculate_best_bet(player_score, banker_score):
             next_bet_amount = current_bet * 1.25
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
+
+    # **修正下注金額不同步的問題**
     current_bet = next_bet_amount  
 
     if round_count == 1:
@@ -164,7 +166,7 @@ def handle_message(event):
             player_score, banker_score = map(int, user_input.split())
 
             if round_count == 2:  
-                current_bet = base_bet
+                current_bet = base_bet  
 
             reply_text = calculate_best_bet(player_score, banker_score)
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
