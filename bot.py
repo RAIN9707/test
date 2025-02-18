@@ -27,7 +27,7 @@ current_bet = 100
 balance = None
 saved_balance = None  
 round_count = 0
-wrong_streak = 0  
+wrong_streak = 0  # **記錄錯誤次數**
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = "莊"  # **第一局固定下注莊家**
@@ -81,11 +81,12 @@ def calculate_best_bet(player_score, banker_score):
         balance -= current_bet  
         wrong_streak += 1  
 
-        if wrong_streak >= 5:  # **當連續錯誤 5 次時，下注金額 100% 重置**
-            current_bet = base_bet
+        # **🔹 修正：確保錯誤達到 5 次後，下注金額 100% 重置**
+        if wrong_streak >= 3:
+            current_bet = base_bet  
             wrong_streak = 0  
         else:
-            current_bet *= 2  
+            current_bet = min(current_bet * 2, balance)  # **確保下注金額不超過餘額**
 
     # **資金為 0，自動結束程序**
     if balance <= 0:
