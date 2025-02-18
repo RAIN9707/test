@@ -82,7 +82,7 @@ def calculate_best_bet(player_score, banker_score):
         wrong_streak += 1  
         current_bet *= 2  
 
-    # **連續 5 次錯誤，重置下注金額**
+    # **當連續錯誤 5 次，下注金額 100% 重置為最低金額**
     if wrong_streak >= 5:
         current_bet = base_bet
         wrong_streak = 0  
@@ -139,6 +139,7 @@ def handle_message(event):
         balance = None
         previous_suggestion = "莊"  # **重置後的第 1 局應該下注莊家**
         current_bet = base_bet  # **確保下注金額重置**
+        wrong_streak = 0  # **重置錯誤計數**
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "休息":
