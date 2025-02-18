@@ -26,6 +26,7 @@ base_bet = 100
 current_bet = 100  
 balance = None  
 saved_balance = None  
+previous_balance = None  # 記錄上一局資金是否歸零
 round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -65,7 +66,7 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, previous_suggestion, game_active
+    global balance, current_bet, round_count, previous_suggestion, game_active, previous_balance
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -91,6 +92,7 @@ def calculate_best_bet(player_score, banker_score):
     # **資金歸零，自動結束**
     if balance <= 0:
         game_active = False
+        previous_balance = 0  # 標記為資金歸零
         return "💸 去充錢吧！"
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
@@ -127,7 +129,7 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance
+    global game_active, balance, base_bet, current_bet, round_count, initial_balance, saved_balance, previous_balance
 
     user_input = event.message.text.strip().lower()
 
@@ -146,6 +148,7 @@ def handle_message(event):
         current_bet = 100  
         previous_suggestion = "莊"  
         history.clear()
+        previous_balance = None  
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "休息":
@@ -153,6 +156,9 @@ def handle_message(event):
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 休息中，當前資金：${balance}"))
 
     elif user_input == "繼續":
+        if previous_balance == 0:  
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="💸 之前歸零了還想繼續啊？請重新輸入本金"))
+        
         if saved_balance is not None:
             balance = saved_balance
             game_active = True
@@ -171,6 +177,7 @@ def handle_message(event):
             balance = int(user_input)
             initial_balance = balance
             update_base_bet()
+            previous_balance = balance  
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
     elif game_active:
