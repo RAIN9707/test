@@ -20,18 +20,18 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # **遊戲狀態**
-game_active = False
-initial_balance = None
+game_active = False  
+initial_balance = None  
 base_bet = 100  
 current_bet = 100  
-balance = None
+balance = None  
 saved_balance = None  
-round_count = 0
+round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
-previous_suggestion = "莊"  # **第一局固定下注莊家**
+previous_suggestion = "莊"  
 
-# **根據資金修正下注基礎金額**
+# **根據資金調整下注金額**
 def update_base_bet():
     global base_bet, current_bet, balance
     if balance < 2000:
@@ -65,7 +65,7 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, previous_suggestion
+    global balance, current_bet, round_count, previous_suggestion, game_active
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -88,17 +88,15 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet  
 
-    # **資金為 0，自動結束程序**
+    # **資金歸零，自動結束**
     if balance <= 0:
         game_active = False
         return "💸 去充錢吧！"
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    # **更新下注金額**
     update_base_bet()
 
-    # **第 1 局固定下注莊家，第 2 局開始根據勝率決定下注目標**
     if round_count == 1:
         previous_suggestion = "莊"
     else:
@@ -133,6 +131,9 @@ def handle_message(event):
 
     user_input = event.message.text.strip().lower()
 
+    if not game_active and user_input != "開始":
+        return  
+
     if user_input == "開始":
         game_active = True
         round_count = 0  
@@ -141,8 +142,10 @@ def handle_message(event):
     elif user_input == "重置":
         game_active = False
         balance = None
-        previous_suggestion = "莊"  # **重置後的第 1 局應該下注莊家**
-        update_base_bet()  
+        base_bet = 100  
+        current_bet = 100  
+        previous_suggestion = "莊"  
+        history.clear()
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "休息":
@@ -163,11 +166,12 @@ def handle_message(event):
         game_active = False
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
 
-    elif user_input.isdigit() and game_active:
-        balance = int(user_input)
-        initial_balance = balance
-        update_base_bet()
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+    elif game_active and user_input.isdigit():
+        if balance is None:
+            balance = int(user_input)
+            initial_balance = balance
+            update_base_bet()
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
     elif game_active:
         try:
