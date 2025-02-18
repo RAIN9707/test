@@ -51,22 +51,15 @@ def calculate_win_probabilities():
     if total_remaining == 0:
         return 0.5068, 0.4932
 
-    # 高牌：8和9，低牌：0到5，中牌：6和7
     high_cards = remaining_cards[8] + remaining_cards[9]
     low_cards = sum(remaining_cards[i] for i in range(6))
     mid_cards = remaining_cards[6] + remaining_cards[7]
 
-    # 計算各類牌的比例
     high_card_ratio = high_cards / total_remaining
     low_card_ratio = low_cards / total_remaining
     mid_card_ratio = mid_cards / total_remaining
 
-    # 根據牌比例調整莊家優勢
-    banker_advantage = 0.5068
-    banker_advantage += (high_card_ratio - low_card_ratio) * 0.05
-    banker_advantage += mid_card_ratio * 0.02
-
-    # 限制莊家優勢在合理範圍內
+    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.05 + mid_card_ratio * 0.02
     banker_advantage = max(0.45, min(0.55, banker_advantage))
 
     return banker_advantage, 1 - banker_advantage
@@ -82,7 +75,6 @@ def update_remaining_cards(player_score, banker_score):
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, round_count, previous_suggestion, game_active
 
-    # 更新剩餘牌數
     update_remaining_cards(player_score, banker_score)
 
     banker_prob, player_prob = calculate_win_probabilities()
@@ -106,7 +98,6 @@ def calculate_best_bet(player_score, banker_score):
     else:
         balance -= current_bet
 
-    # 資金歸零，自動結束
     if balance <= 0:
         game_active = False
         return (
@@ -166,6 +157,31 @@ def handle_message(event):
     elif user_input == "重置":
         game_active = False
         balance = None
-        base
-::contentReference[oaicite:0]{index=0}
- 
+        base_bet = 100
+        current_bet = 100
+        previous_suggestion = "莊"
+        history.clear()
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
+        return
+
+    elif user_input == "結束":
+        game_active = False
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
+        return
+
+    elif game_active and user_input.isdigit():
+        if balance is None:
+            balance = int(user_input)
+            initial_balance = balance
+            update_base_bet()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+            return
+
+    elif game_active:
+        try:
+            round_count += 1
+            player_score, banker_score = map(int, user_input.split())
+            reply_text = calculate_best_bet(player_score, banker_score)
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        except:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
