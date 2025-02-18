@@ -27,7 +27,6 @@ current_bet = 100
 balance = None
 saved_balance = None  
 round_count = 0
-loss_streak = 0  
 wrong_streak = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -52,17 +51,15 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, loss_streak, wrong_streak, previous_suggestion
+    global balance, current_bet, round_count, wrong_streak, previous_suggestion
 
     banker_prob, player_prob = calculate_win_probabilities()
 
     if player_score > banker_score:
         result = "閒家贏"
-        loss_streak = 0  
         wrong_streak = 0  
     elif banker_score > player_score:
         result = "莊家贏"
-        loss_streak = 0  
         wrong_streak = 0  
     else:
         result = "和局"
@@ -85,8 +82,8 @@ def calculate_best_bet(player_score, banker_score):
         wrong_streak += 1  
         current_bet *= 2  
 
-    # **連續 4 次錯誤，重置下注金額**
-    if wrong_streak >= 4:
+    # **連續 5 次錯誤，重置下注金額**
+    if wrong_streak >= 5:
         current_bet = base_bet
         wrong_streak = 0  
 
@@ -141,6 +138,7 @@ def handle_message(event):
         game_active = False
         balance = None
         previous_suggestion = "莊"  # **重置後的第 1 局應該下注莊家**
+        current_bet = base_bet  # **確保下注金額重置**
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
 
     elif user_input == "休息":
