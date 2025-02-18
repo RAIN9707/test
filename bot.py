@@ -24,7 +24,7 @@ initial_balance = None
 base_bet = 100
 current_bet = 100
 balance = None
-saved_balance = None
+saved_balance = None  # 儲存休息時的資金
 round_count = 0
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
@@ -164,24 +164,24 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
         return
 
+    elif user_input == "休息":
+        saved_balance = balance
+        game_active = False  
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 休息中，當前資金：${balance}"))
+        return
+
+    elif user_input == "繼續":
+        if saved_balance is not None:
+            balance = saved_balance
+            game_active = True
+            round_count = 0
+            update_base_bet()
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 繼續遊戲，資金：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
+        else:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無儲存的資金，請輸入『開始』重新遊戲"))
+        return
+
     elif user_input == "結束":
         game_active = False
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
         return
-
-    elif game_active and user_input.isdigit():
-        if balance is None:
-            balance = int(user_input)
-            initial_balance = balance
-            update_base_bet()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
-            return
-
-    elif game_active:
-        try:
-            round_count += 1
-            player_score, banker_score = map(int, user_input.split())
-            reply_text = calculate_best_bet(player_score, banker_score)
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
-        except:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 輸入錯誤，請輸入『閒家 莊家』的點數，如 '8 9'"))
