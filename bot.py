@@ -33,7 +33,7 @@ remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **優化勝率計算**
+# **更準確的勝率計算**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
@@ -47,12 +47,11 @@ def calculate_win_probabilities():
 
     banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
 
-    # **增加隨機變數，讓勝率計算更靈活**
     variance = random.uniform(-0.015, 0.015)
-    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  # 限制範圍在 48%~52% 避免極端
+    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
     return banker_advantage, 1 - banker_advantage
 
-# **更均衡的下注策略**
+# **更精確的下注策略**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, total_wins, total_losses, round_count, previous_suggestion, next_bet_amount
 
@@ -81,19 +80,17 @@ def calculate_best_bet(player_score, banker_score):
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    # **調整下注方向，使其更均衡**
     if banker_prob > player_prob:
-        if random.random() > 0.6:  # 增加 40% 閒家下注機率
+        if random.random() > 0.5:  
             previous_suggestion = "閒"
         else:
             previous_suggestion = "莊"
     else:
-        if random.random() > 0.6:  # 增加 40% 莊家下注機率
+        if random.random() > 0.5:  
             previous_suggestion = "莊"
         else:
             previous_suggestion = "閒"
 
-    # **計算下一局下注金額**
     if round_count == 1:
         next_bet_amount = base_bet  
     else:
@@ -105,6 +102,8 @@ def calculate_best_bet(player_score, banker_score):
             next_bet_amount = current_bet * (1.25 if previous_suggestion == "莊" else 1.5)
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
+
+    # **確保實際下注金額與建議金額一致**
     current_bet = next_bet_amount  
 
     if round_count == 1:
