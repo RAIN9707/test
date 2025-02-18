@@ -26,6 +26,7 @@ base_bet = 100
 current_bet = 0  
 balance = None
 round_count = 0
+loss_streak = 0  # **連續輸局計數**
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
@@ -49,14 +50,16 @@ def calculate_win_probabilities():
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
-    global balance, current_bet, round_count, previous_suggestion
+    global balance, current_bet, round_count, previous_suggestion, loss_streak
 
     banker_prob, player_prob = calculate_win_probabilities()
 
     if player_score > banker_score:
         result = "閒家贏"
+        loss_streak = 0  # **贏局時重置輸局計數**
     elif banker_score > player_score:
         result = "莊家贏"
+        loss_streak = 0  # **贏局時重置輸局計數**
     else:
         result = "和局"
 
@@ -73,7 +76,13 @@ def calculate_best_bet(player_score, banker_score):
         bet_result = "🔄 和局 - 本金不變"
     else:
         balance -= current_bet  
+        loss_streak += 1  # **累計連輸局數**
         current_bet *= 2  
+
+    # **止損機制：連輸 5 次，重置下注金額**
+    if loss_streak >= 5:
+        current_bet = base_bet
+        loss_streak = 0  # **重置連輸計數**
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
@@ -150,3 +159,5 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
+
+🚀 **這次修正後，確保連續 5 次輸局會自動重置下注金額，避免過度回撤！** 🚀
