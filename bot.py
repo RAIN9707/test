@@ -19,7 +19,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# **遊戲狀態**
+# **遊戲狀態變數**
 game_active = False
 initial_balance = None
 base_bet = None
@@ -33,7 +33,7 @@ remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **精細勝率計算**
+# **計算剩餘牌組影響的勝率**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
