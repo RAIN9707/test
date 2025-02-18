@@ -9,7 +9,7 @@ from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# **LINE Bot 設定**
+# **設定 LINE Bot 環境變數**
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
@@ -19,7 +19,7 @@ if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# **遊戲變數**
+# **遊戲狀態**
 game_active = False
 initial_balance = None
 base_bet = None
@@ -33,7 +33,7 @@ remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = None  
 next_bet_amount = None  
 
-# **勝率計算**
+# **計算勝率**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
@@ -43,12 +43,12 @@ def calculate_win_probabilities():
     low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
     neutral_card_ratio = (remaining_cards[6] + remaining_cards[7]) / total_remaining
 
-    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history[-10:]) / 10 if history else 0
+    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
 
     banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
-
     variance = random.uniform(-0.015, 0.015)
     banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
+
     return banker_advantage, 1 - banker_advantage
 
 # **下注策略**
@@ -80,22 +80,7 @@ def calculate_best_bet(player_score, banker_score):
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
-    # **確保和局後仍然顯示下注建議**
-    if result == "和局":
-        if random.random() > 0.5:
-            previous_suggestion = "莊"
-        else:
-            previous_suggestion = "閒"
-        return (
-            f"📌 第 {round_count} 局結果：{result}\n"
-            f"🎲 下注結果：{bet_result}\n"
-            f"💵 剩餘資金：${balance}\n\n"
-            f"✅ **第 {round_count + 1} 局下注建議**\n"
-            f"🎯 下注目標：{previous_suggestion}\n"
-            f"💰 下注金額：${current_bet}\n"
-            f"📊 勝率分析：莊 {banker_prob:.2%}, 閒 {player_prob:.2%}"
-        )
-
+    # **調整下注策略**
     if banker_prob > player_prob:
         previous_suggestion = "莊"
     else:
@@ -104,17 +89,26 @@ def calculate_best_bet(player_score, banker_score):
     if round_count == 1:
         next_bet_amount = base_bet  
     else:
-        if total_losses >= 2:
+        if total_losses >= 3:
             next_bet_amount = base_bet
         elif total_wins >= 2:
-            next_bet_amount = min(balance * 0.05, current_bet * 1.5)
+            next_bet_amount = current_bet * 1.5
         else:
             next_bet_amount = current_bet * 1.25
 
     next_bet_amount = round(next_bet_amount / 50) * 50  
 
-    # **確保下注金額與建議同步**
     current_bet = next_bet_amount  
+
+    # **第一局不下注**
+    if round_count == 1:
+        return (
+            f"📌 第 1 局結果：{result}（僅記錄，不下注）\n\n"
+            f"✅ **第 2 局下注建議**\n"
+            f"🎯 下注目標：{previous_suggestion}\n"
+            f"💰 下注金額：${next_bet_amount}\n"
+            f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%"
+        )
 
     return (
         f"📌 第 {round_count} 局結果：{result}\n"
@@ -123,7 +117,7 @@ def calculate_best_bet(player_score, banker_score):
         f"✅ **第 {round_count + 1} 局下注建議**\n"
         f"🎯 下注目標：{previous_suggestion}\n"
         f"💰 下注金額：${next_bet_amount}\n"
-        f"📊 勝率分析：莊 {banker_prob:.2%}, 閒 {player_prob:.2%}"
+        f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%"
     )
 
 # **Webhook**
@@ -171,7 +165,12 @@ def handle_message(event):
         return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result_text))
 
     elif game_active:
-        round_count += 1
-        player_score, banker_score = map(int, user_input.split())
-        reply_text = calculate_best_bet(player_score, banker_score)
-        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        try:
+            round_count += 1
+            player_score, banker_score = map(int, user_input.split())
+            reply_text = calculate_best_bet(player_score, banker_score)
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        except:
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
+
+🚀 **現在勝率計算更精確，下注邏輯更穩定，試試看吧！** 🚀
