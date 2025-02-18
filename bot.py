@@ -1,5 +1,6 @@
 import os
 import random
+import numpy as np
 from collections import deque
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -8,7 +9,7 @@ from linebot.exceptions import InvalidSignatureError
 
 app = Flask(__name__)
 
-# 設定 LINE Bot 環境變數
+# **設定 LINE Bot 環境變數**
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
@@ -18,19 +19,19 @@ if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# 遊戲狀態
-game_active = False
-initial_balance = None
-base_bet = 100
-current_bet = 100
-balance = None
-saved_balance = None  # 儲存休息時的資金
-round_count = 0
+# **遊戲狀態**
+game_active = False  
+initial_balance = None  
+base_bet = 100  
+current_bet = 100  
+balance = None  
+saved_balance = None  
+round_count = 0  
 history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
-previous_suggestion = "莊"
+previous_suggestion = "莊"  
 
-# 根據資金調整下注金額
+# **根據資金調整下注金額**
 def update_base_bet():
     global base_bet, current_bet, balance
     if balance < 2000:
@@ -43,39 +44,28 @@ def update_base_bet():
         base_bet = 200
     else:
         base_bet = 300
-    current_bet = base_bet
+    current_bet = base_bet  
 
-# 計算勝率
+# **計算勝率**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
-        return 0.5068, 0.4932
+        return 0.5068, 0.4932  
 
-    high_cards = remaining_cards[8] + remaining_cards[9]
-    low_cards = sum(remaining_cards[i] for i in range(6))
-    mid_cards = remaining_cards[6] + remaining_cards[7]
+    high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
+    low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
+    neutral_card_ratio = (remaining_cards[6] + remaining_cards[7]) / total_remaining
 
-    high_card_ratio = high_cards / total_remaining
-    low_card_ratio = low_cards / total_remaining
-    mid_card_ratio = mid_cards / total_remaining
+    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
 
-    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.05 + mid_card_ratio * 0.02
-    banker_advantage = max(0.45, min(0.55, banker_advantage))
-
+    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
+    variance = random.uniform(-0.015, 0.015)
+    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
     return banker_advantage, 1 - banker_advantage
 
-# 更新剩餘牌數
-def update_remaining_cards(player_score, banker_score):
-    global remaining_cards
-    for card in [player_score, banker_score]:
-        if card in remaining_cards and remaining_cards[card] > 0:
-            remaining_cards[card] -= 1
-
-# 下注策略
+# **下注策略**
 def calculate_best_bet(player_score, banker_score):
     global balance, current_bet, round_count, previous_suggestion, game_active
-
-    update_remaining_cards(player_score, banker_score)
 
     banker_prob, player_prob = calculate_win_probabilities()
 
@@ -88,31 +78,35 @@ def calculate_best_bet(player_score, banker_score):
 
     bet_result = "❌ 錯誤"
     if previous_suggestion == "莊" and result == "莊家贏":
-        balance += current_bet * 0.95
+        balance += current_bet * 0.95  
         bet_result = "✅ 正確"
     elif previous_suggestion == "閒" and result == "閒家贏":
-        balance += current_bet
+        balance += current_bet  
         bet_result = "✅ 正確"
     elif result == "和局":
         bet_result = "🔄 和局 - 本金不變"
     else:
-        balance -= current_bet
-
-    if balance <= 0:
-        game_active = False
-        return (
-            f"📌 第 {round_count} 局結果：{result}\n"
-            f"🎲 下注結果：{bet_result}\n"
-            f"💵 剩餘資金：${balance}\n\n"
-            "💸 資金已歸零，遊戲結束。請重新開始或增加資金。"
-        )
+        balance -= current_bet  
 
     history.append({"局數": round_count, "結果": result, "下注": current_bet, "剩餘資金": balance})
 
     update_base_bet()
 
-    if round_count == 1:
+    # **最近 5 局趨勢**
+    last_5_games = list(history)[-5:]
+    banker_wins = sum(1 for h in last_5_games if h["結果"] == "莊家贏")
+    player_wins = sum(1 for h in last_5_games if h["結果"] == "閒家贏")
+
+    if round_count >= 3:
+        if banker_wins >= 4:
+            banker_prob += 0.02  
+        if player_wins >= 4:
+            player_prob += 0.02  
+
+    if banker_prob > 0.57:
         previous_suggestion = "莊"
+    elif player_prob > 0.57:
+        previous_suggestion = "閒"
     else:
         previous_suggestion = "莊" if banker_prob > player_prob else "閒"
 
@@ -126,7 +120,7 @@ def calculate_best_bet(player_score, banker_score):
         f"📊 勝率分析：莊 {banker_prob*100:.2f}%, 閒 {player_prob*100:.2f}%"
     )
 
-# Webhook
+# **Webhook**
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers.get("X-Line-Signature")
@@ -146,51 +140,26 @@ def handle_message(event):
     user_input = event.message.text.strip().lower()
 
     if not game_active and user_input != "開始":
-        return
+        return  
 
     if user_input == "開始":
         game_active = True
-        round_count = 0
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
-        return
-
-    elif user_input == "重置":
-        game_active = False
-        balance = None
-        base_bet = 100
-        current_bet = 100
-        previous_suggestion = "莊"
-        history.clear()
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="已重置系統，請輸入『開始』來重新設定本金"))
-        return
-
-    elif user_input == "休息":
-        saved_balance = balance
-        game_active = False  
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"💰 休息中，當前資金：${balance}"))
-        return
-
-    elif user_input == "繼續":
-        if saved_balance is not None:
-            balance = saved_balance
-            game_active = True
-            round_count = 0
-            update_base_bet()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🎯 繼續遊戲，資金：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ 無儲存的資金，請輸入『開始』重新遊戲"))
-        return
+        round_count = 0  
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="請輸入您的本金金額，例如：5000"))
 
     elif user_input == "結束":
         game_active = False
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
-        return
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 期待下次再來賺錢！"))
 
     elif game_active and user_input.isdigit():
         if balance is None:
             balance = int(user_input)
             initial_balance = balance
             update_base_bet()
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
-            return
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"本金設定：${balance}\n請輸入『閒家 莊家』的點數，如 '8 9'"))
 
+    elif game_active:
+        round_count += 1
+        player_score, banker_score = map(int, user_input.split())
+        reply_text = calculate_best_bet(player_score, banker_score)
+        return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
