@@ -159,5 +159,3 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
         except:
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="輸入格式錯誤，請重新輸入，例如 '8 9'"))
-
-🚀 **這次修正後，確保連續 5 次輸局會自動重置下注金額，避免過度回撤！** 🚀
