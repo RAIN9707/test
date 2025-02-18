@@ -50,18 +50,27 @@ def update_base_bet():
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
-        return 0.5068, 0.4932  
+        return 0.5068, 0.4932  # 默认值，表示庄家和闲家的基本胜率
 
-    high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
-    low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
-    neutral_card_ratio = (remaining_cards[6] + remaining_cards[7]) / total_remaining
+    # 计算高牌（8和9）、低牌（0到5）和中牌（6和7）的比例
+    high_cards = remaining_cards[8] + remaining_cards[9]
+    low_cards = sum(remaining_cards[i] for i in range(6))
+    mid_cards = remaining_cards[6] + remaining_cards[7]
 
-    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
+    high_card_ratio = high_cards / total_remaining
+    low_card_ratio = low_cards / total_remaining
+    mid_card_ratio = mid_cards / total_remaining
 
-    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015)
-    variance = random.uniform(-0.015, 0.015)
-    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
+    # 根据牌的比例调整庄家优势
+    banker_advantage = 0.5068  # 庄家的基本胜率
+    banker_advantage += (high_card_ratio - low_card_ratio) * 0.05  # 高牌比例增加庄家优势
+    banker_advantage += mid_card_ratio * 0.02  # 中牌比例对庄家优势的影响
+
+    # 确保庄家优势在合理范围内
+    banker_advantage = max(0.45, min(0.55, banker_advantage))
+
     return banker_advantage, 1 - banker_advantage
+
 
 # **下注策略**
 def calculate_best_bet(player_score, banker_score):
