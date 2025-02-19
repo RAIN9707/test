@@ -31,6 +31,7 @@ history = deque(maxlen=50)
 remaining_cards = {i: 32 for i in range(10)}
 previous_suggestion = "莊"  
 
+
 # **根據資金調整下注金額**
 def update_base_bet():
     global base_bet, current_bet, balance
@@ -46,29 +47,30 @@ def update_base_bet():
         base_bet = 300
     current_bet = base_bet  
 
-# **計算勝率**
+# **修正勝率計算，提升準確率**
 def calculate_win_probabilities():
     total_remaining = sum(remaining_cards.values())
     if total_remaining == 0:
-        return 0.5068, 0.4932  # 默认值，表示庄家和闲家的基本胜率
+        return 0.5068, 0.4932  
 
-    # 计算高牌（8和9）、低牌（0到5）和中牌（6和7）的比例
-    high_cards = remaining_cards[8] + remaining_cards[9]
-    low_cards = sum(remaining_cards[i] for i in range(6))
-    mid_cards = remaining_cards[6] + remaining_cards[7]
+    high_card_ratio = (remaining_cards[8] + remaining_cards[9]) / total_remaining
+    low_card_ratio = sum(remaining_cards[i] for i in range(6)) / total_remaining
+    neutral_card_ratio = (remaining_cards[6] + remaining_cards[7]) / total_remaining
 
-    high_card_ratio = high_cards / total_remaining
-    low_card_ratio = low_cards / total_remaining
-    mid_card_ratio = mid_cards / total_remaining
+    trend_factor = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in history) / len(history) if history else 0
 
-    # 根据牌的比例调整庄家优势
-    banker_advantage = 0.5068  # 庄家的基本胜率
-    banker_advantage += (high_card_ratio - low_card_ratio) * 0.05  # 高牌比例增加庄家优势
-    banker_advantage += mid_card_ratio * 0.02  # 中牌比例对庄家优势的影响
+    # **加入最近 10 局趨勢影響勝率**
+    recent_trend = sum(1 if h["結果"] == "莊家贏" else -1 if h["結果"] == "閒家贏" else 0 for h in list(history)[-10:]) / 10 if len(history) >= 10 else 0
 
-    # 确保庄家优势在合理范围内
-    banker_advantage = max(0.45, min(0.55, banker_advantage))
+    # **補牌影響計算**
+    banker_draw_factor = (remaining_cards[0] + remaining_cards[1] + remaining_cards[2] + remaining_cards[3]) / total_remaining
+    player_draw_factor = (remaining_cards[4] + remaining_cards[5] + remaining_cards[6] + remaining_cards[7]) / total_remaining
 
+    banker_advantage = 0.5068 + (high_card_ratio - low_card_ratio) * 0.02 + (neutral_card_ratio * 0.01) + (trend_factor * 0.015) + (recent_trend * 0.01)
+    banker_advantage += (banker_draw_factor - player_draw_factor) * 0.02  
+
+    variance = random.uniform(-0.01, 0.01)  
+    banker_advantage = max(0.48, min(0.52, banker_advantage + variance))  
     return banker_advantage, 1 - banker_advantage
 
 
